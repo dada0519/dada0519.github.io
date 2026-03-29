@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>台指選擇權 隱含波動率計算器</title>
+  <style>
+    :root {
+      --primary: #1F4E79;
+      --primary-light: #2980B9;
+      --accent: #E74C3C;
+      --green: #27AE60;
+      --orange: #E67E22;
+      --purple: #6C3483;
+      --bg: #F0F4F8;
+      --card: #FFFFFF;
+      --border: #D5E8F3;
+      --text: #2C3E50;
+      --muted: #7F8C8D;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: linear-gradient(135deg, var(--primary) 0%, #154360 100%);
+      color: #fff;
+      padding: 28px 24px 20px;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    }
+    header h1 { font-size: 1.8rem; letter-spacing: 1px; }
+    header p  { margin-top: 6px; font-size: 0.95rem; opacity: 0.85; }
+
+    .tab-bar {
+      display: flex; gap: 4px;
+      background: var(--primary);
+      padding: 0 20px;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      padding: 10px 20px;
+      border: none; background: transparent;
+      color: rgba(255,255,255,0.65);
+      font-size: 0.95rem; cursor: pointer;
+      border-bottom: 3px solid transparent;
+      white-space: nowrap;
+      transition: all .2s;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      color: #fff;
+      border-bottom-color: #F39C12;
+    }
+
+    .tab-panel { display: none; padding: 24px 20px; max-width: 1100px; margin: 0 auto; }
+    .tab-panel.active { display: block; }
+
+    .card {
+      background: var(--card);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 1.05rem;
+      color: var(--primary);
+      border-left: 4px solid var(--primary-light);
+      padding-left: 10px;
+      margin-bottom: 18px;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    @media(max-width:640px){
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+    input, select {
+      width: 100%; padding: 10px 12px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px; font-size: 1rem;
+      transition: border .2s;
+      background: #FAFCFF;
+    }
+    input:focus, select:focus {
+      outline: none; border-color: var(--primary-light);
+      background: #fff;
+    }
+
+    .btn {
+      width: 100%; padding: 13px;
+      background: linear-gradient(135deg, var(--primary-light), var(--primary));
+      color: #fff; border: none; border-radius: 10px;
+      font-size: 1.05rem; font-weight: bold;
+      cursor: pointer; margin-top: 8px;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn:hover { opacity: .9; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      margin-top: 4px;
+    }
+    .result-box {
+      border-radius: 10px;
+      padding: 16px 14px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .result-box .r-label { font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; }
+    .result-box .r-value { font-size: 1.5rem; font-weight: bold; }
+    .result-box .r-sub   { font-size: 0.78rem; margin-top: 4px; color: var(--muted); }
+    .rb-blue  { background: #EBF5FB; }
+    .rb-green { background: #EAFAF1; }
+    .rb-red   { background: #FDEDEC; }
+    .rb-orange{ background: #FEF9E7; }
+    .rb-purple{ background: #F4ECF7; }
+
+    .verdict {
+      border-radius: 10px; padding: 16px 20px;
+      margin-top: 16px; font-size: 0.97rem;
+      border-left: 5px solid;
+    }
+    .verdict.red    { background:#FDEDEC; border-color: var(--accent);  }
+    .verdict.orange { background:#FEF9E7; border-color: var(--orange); }
+    .verdict.green  { background:#EAFAF1; border-color: var(--green);  }
+    .verdict strong { display: block; font-size: 1.05rem; margin-bottom: 4px; }
+
+    /* IV Table */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th {
+      background: var(--primary);
+      color: #fff; padding: 10px 12px;
+      text-align: center; white-space: nowrap;
+    }
+    td {
+      padding: 8px 12px; text-align: center;
+      border-bottom: 1px solid #EEF2F7;
+      white-space: nowrap;
+    }
+    tr:hover td { background: #F0F8FF; }
+    tr.highlight td { background: #FDEDEC; font-weight: bold; color: var(--accent); }
+    tr.highlight td:first-child::after { content: " ←你的報價"; font-size:0.75rem; }
+
+    .iv-badge {
+      display: inline-block; padding: 2px 9px;
+      border-radius: 12px; font-size: 0.78rem; font-weight: bold;
+    }
+    .iv-normal { background:#EAFAF1; color:#1E8449; }
+    .iv-high   { background:#FEF9E7; color:#B7770D; }
+    .iv-vhigh  { background:#FDEDEC; color:#E74C3C; }
+    .iv-panic  { background:#F4ECF7; color:#6C3483; }
+
+    /* Greeks */
+    .greeks-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px; margin-top: 4px;
+    }
+    .greek-card {
+      border-radius: 10px; padding: 14px;
+      text-align: center; background: #F8FAFC;
+      border: 1px solid var(--border);
+    }
+    .greek-card .gk-name  { font-size: 1.2rem; font-weight: bold; color: var(--primary); }
+    .greek-card .gk-val   { font-size: 1.3rem; font-weight: bold; margin: 6px 0; }
+    .greek-card .gk-desc  { font-size: 0.75rem; color: var(--muted); }
+
+    /* Guide */
+    .guide-section { margin-bottom: 20px; }
+    .guide-section h3 { color: var(--primary); margin-bottom: 10px; font-size: 1rem; }
+    .guide-table { width: 100%; border-collapse: collapse; }
+    .guide-table th { background: #EBF5FB; color: var(--primary); padding: 8px 14px; text-align: left; }
+    .guide-table td { padding: 8px 14px; border-bottom: 1px solid #EEF2F7; }
+    .guide-table tr:last-child td { border-bottom: none; }
+
+    footer {
+      text-align: center; padding: 20px;
+      font-size: 0.82rem; color: var(--muted);
+      border-top: 1px solid var(--border);
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🇹🇼 台指選擇權 隱含波動率計算器</h1>
+  <p>Black-Scholes 模型｜反推隱含波動率｜Greeks 風險指標</p>
+</header>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('calc')">📊 快速計算</button>
+  <button class="tab-btn" onclick="switchTab('table')">📈 IV 對照表</button>
+  <button class="tab-btn" onclick="switchTab('multi')">🔍 多檔評估</button>
+  <button class="tab-btn" onclick="switchTab('guide')">📖 使用說明</button>
+</div>
+
+<!-- ── TAB 1: 快速計算 ───────────────────────────────────────── -->
+<div id="tab-calc" class="tab-panel active">
+  <div class="card">
+    <h2>輸入參數</h2>
+    <div class="grid-2">
+      <div>
+        <label>台指期現價 (S)</label>
+        <input type="number" id="s" value="32300" />
+      </div>
+      <div>
+        <label>履約價 (K)</label>
+        <input type="number" id="k" value="26000" />
+      </div>
+      <div>
+        <label>選擇權類型</label>
+        <select id="opt_type">
+          <option value="put">Put（賣權）</option>
+          <option value="call">Call（買權）</option>
+        </select>
+      </div>
+      <div>
+        <label>市場報價（點）</label>
+        <input type="number" id="mkt" value="1500" />
+      </div>
+      <div>
+        <label>距到期天數</label>
+        <input type="number" id="days" value="264" />
+      </div>
+      <div>
+        <label>無風險利率（%）</label>
+        <input type="number" id="rate" value="2.0" step="0.1" />
+      </div>
+    </div>
+    <button class="btn" onclick="calculate()">⚡ 立即計算</button>
+  </div>
+
+  <div class="card" id="result-section" style="display:none">
+    <h2>計算結果</h2>
+    <div class="result-grid">
+      <div class="result-box rb-red">
+        <div class="r-label">隱含波動率 IV</div>
+        <div class="r-value" id="r-iv">-</div>
+        <div class="r-sub" id="r-iv-lbl">-</div>
+      </div>
+      <div class="result-box rb-blue">
+        <div class="r-label">理論價格</div>
+        <div class="r-value" id="r-theo">-</div>
+        <div class="r-sub">點</div>
+      </div>
+      <div class="result-box rb-orange">
+        <div class="r-label">損益兩平</div>
+        <div class="r-value" id="r-be">-</div>
+        <div class="r-sub">台指點位</div>
+      </div>
+      <div class="result-box rb-green">
+        <div class="r-label">價外程度</div>
+        <div class="r-value" id="r-otm">-</div>
+        <div class="r-sub">OTM %</div>
+      </div>
+    </div>
+    <div class="verdict" id="verdict-box">
+      <strong id="verdict-title"></strong>
+      <span id="verdict-desc"></span>
+    </div>
+  </div>
+
+  <div class="card" id="greeks-section" style="display:none">
+    <h2>Greeks 風險指標</h2>
+    <div class="greeks-grid">
+      <div class="greek-card">
+        <div class="gk-name">Δ Delta</div>
+        <div class="gk-val" id="g-delta">-</div>
+        <div class="gk-desc">現貨變動敏感度</div>
+      </div>
+      <div class="greek-card">
+        <div class="gk-name">Γ Gamma</div>
+        <div class="gk-val" id="g-gamma">-</div>
+        <div class="gk-desc">Delta 變化速度</div>
+      </div>
+      <div class="greek-card">
+        <div class="gk-name">Θ Theta</div>
+        <div class="gk-val" id="g-theta">-</div>
+        <div class="gk-desc">每日時間損耗（點）</div>
+      </div>
+      <div class="greek-card">
+        <div class="gk-name">ν Vega</div>
+        <div class="gk-val" id="g-vega">-</div>
+        <div class="gk-desc">IV +1% 的價格變動</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── TAB 2: IV 對照表 ──────────────────────────────────────── -->
+<div id="tab-table" class="tab-panel">
+  <div class="card">
+    <h2>IV 水準 × 履約價 理論價格對照表</h2>
+    <div class="grid-3" style="margin-bottom:16px">
+      <div><label>台指現價</label><input type="number" id="tbl-s" value="32300"/></div>
+      <div><label>距到期天數</label><input type="number" id="tbl-days" value="264"/></div>
+      <div><label>無風險利率(%)</label><input type="number" id="tbl-rate" value="2.0" step="0.1"/></div>
+    </div>
+    <button class="btn" onclick="buildTable()">🔄 產生對照表</button>
+  </div>
+  <div class="card">
+    <h2>📉 Put 理論價格</h2>
+    <div class="tbl-wrap"><table id="put-table"></table></div>
+  </div>
+  <div class="card">
+    <h2>📈 Call 理論價格</h2>
+    <div class="tbl-wrap"><table id="call-table"></table></div>
+  </div>
+</div>
+
+<!-- ── TAB 3: 多檔評估 ───────────────────────────────────────── -->
+<div id="tab-multi" class="tab-panel">
+  <div class="card">
+    <h2>多檔報價隱含IV評估</h2>
+    <div class="grid-3" style="margin-bottom:16px">
+      <div><label>台指現價</label><input type="number" id="m-s" value="32300"/></div>
+      <div><label>距到期天數</label><input type="number" id="m-days" value="264"/></div>
+      <div><label>無風險利率(%)</label><input type="number" id="m-rate" value="2.0" step="0.1"/></div>
+    </div>
+    <p style="font-size:.85rem;color:var(--muted);margin-bottom:12px">在下方填入各履約價的市場報價，留空則跳過。</p>
+    <div id="multi-inputs"></div>
+    <button class="btn" onclick="calcMulti()">⚡ 批次計算</button>
+  </div>
+  <div class="card" id="multi-result" style="display:none">
+    <h2>評估結果</h2>
+    <div class="tbl-wrap"><table id="multi-table"></table></div>
+  </div>
+</div>
+
+<!-- ── TAB 4: 使用說明 ───────────────────────────────────────── -->
+<div id="tab-guide" class="tab-panel">
+  <div class="card guide-section">
+    <h2>🔢 Black-Scholes 公式</h2>
+    <table class="guide-table">
+      <tr><th>項目</th><th>公式</th></tr>
+      <tr><td>Put</td><td>P = K·e<sup>-rT</sup>·N(-d2) − S·N(-d1)</td></tr>
+      <tr><td>Call</td><td>C = S·N(d1) − K·e<sup>-rT</sup>·N(d2)</td></tr>
+      <tr><td>d1</td><td>[ln(S/K) + (r + σ²/2)·T] / (σ·√T)</td></tr>
+      <tr><td>d2</td><td>d1 − σ·√T</td></tr>
+      <tr><td>隱含 IV</td><td>使理論價格 = 市場報價的 σ（二分法求解）</td></tr>
+    </table>
+  </div>
+  <div class="card guide-section">
+    <h2>📊 Greeks 說明</h2>
+    <table class="guide-table">
+      <tr><th>Greeks</th><th>意義</th></tr>
+      <tr><td><b>Delta</b></td><td>現貨每變動 1 點，選擇權價格的變動量；Put 為負值(-1~0)</td></tr>
+      <tr><td><b>Gamma</b></td><td>Delta 的變化速度，越大代表風險加速度越高</td></tr>
+      <tr><td><b>Theta</b></td><td>時間每過一天的損耗點數（對賣方有利）</td></tr>
+      <tr><td><b>Vega</b></td><td>IV 每變動 1%，選擇權價格的變動量</td></tr>
+    </table>
+  </div>
+  <div class="card guide-section">
+    <h2>🎯 IV 水準判斷</h2>
+    <table class="guide-table">
+      <tr><th>IV 範圍</th><th>市場狀況</th><th>標誌</th></tr>
+      <tr><td>15% – 20%</td><td>正常平靜市場</td><td><span class="iv-badge iv-normal">✅ 正常</span></td></tr>
+      <tr><td>20% – 30%</td><td>市場有擔憂情緒</td><td><span class="iv-badge iv-high">🟡 偏高</span></td></tr>
+      <tr><td>30% – 40%</td><td>市場恐慌（如重大利空）</td><td><span class="iv-badge iv-vhigh">🟠 恐慌</span></td></tr>
+      <tr><td>40%+</td><td>極端事件（黑天鵝）</td><td><span class="iv-badge iv-panic">🔴 極端</span></td></tr>
+    </table>
+  </div>
+  <div class="card guide-section">
+    <h2>⚠️ 風險提醒</h2>
+    <table class="guide-table">
+      <tr><td>📌 模型限制</td><td>BS 模型假設波動率恆定，實際 IV 會隨時間與行情變動</td></tr>
+      <tr><td>📌 波動率偏斜</td><td>深度 OTM Put 的 IV 通常比平值選擇權更高（Skew 現象）</td></tr>
+      <tr><td>📌 流動性</td><td>遠月深 OTM 的買賣價差可能很大，成交價可能偏離理論值</td></tr>
+      <tr><td>📌 保證金</td><td>賣出選擇權需維持保證金，極端行情可能超過本金</td></tr>
+    </table>
+  </div>
+</div>
+
+<footer>台指選擇權 隱含波動率計算器 ｜ Black-Scholes Model ｜ 僅供參考，非投資建議</footer>
+
+<script>
+// ── 常態分布 ──────────────────────────────────────────────────
+function erf(x) {
+  const a1= 0.254829592, a2=-0.284496736, a3= 1.421413741,
+        a4=-1.453152027, a5= 1.061405429, p=  0.3275911;
+  const sign = x < 0 ? -1 : 1; x = Math.abs(x);
+  const t = 1 / (1 + p*x);
+  const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x);
+  return sign * y;
+}
+function normCDF(x){ return 0.5*(1+erf(x/Math.sqrt(2))); }
+function normPDF(x){ return Math.exp(-0.5*x*x)/Math.sqrt(2*Math.PI); }
+
+// ── Black-Scholes ─────────────────────────────────────────────
+function bsPrice(S,K,T,r,sigma,type){
+  if(T<=0) return type==='put' ? Math.max(K-S,0) : Math.max(S-K,0);
+  const d1=(Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
+  const d2=d1-sigma*Math.sqrt(T);
+  if(type==='put')
+    return K*Math.exp(-r*T)*normCDF(-d2)-S*normCDF(-d1);
+  return S*normCDF(d1)-K*Math.exp(-r*T)*normCDF(d2);
+}
+
+function impliedVol(S,K,T,r,mkt,type){
+  let lo=0.001, hi=5.0;
+  for(let i=0;i<500;i++){
+    const mid=(lo+hi)/2;
+    const p=bsPrice(S,K,T,r,mid,type);
+    if(Math.abs(p-mkt)<0.001) return mid;
+    if(p>mkt) hi=mid; else lo=mid;
+  }
+  return (lo+hi)/2;
+}
+
+function calcGreeks(S,K,T,r,sigma,type){
+  const d1=(Math.log(S/K)+(r+0.5*sigma*sigma)*T)/(sigma*Math.sqrt(T));
+  const d2=d1-sigma*Math.sqrt(T);
+  const delta = type==='put' ? normCDF(d1)-1 : normCDF(d1);
+  const gamma = normPDF(d1)/(S*sigma*Math.sqrt(T));
+  const thetaBase = -S*normPDF(d1)*sigma/(2*Math.sqrt(T));
+  const theta = type==='put'
+    ? (thetaBase+r*K*Math.exp(-r*T)*normCDF(-d2))/365
+    : (thetaBase-r*K*Math.exp(-r*T)*normCDF(d2))/365;
+  const vega = S*normPDF(d1)*Math.sqrt(T)/100;
+  return {delta,gamma,theta,vega};
+}
+
+function ivLabel(iv){
+  if(iv<20) return {text:'✅ 正常水準',cls:'iv-normal'};
+  if(iv<30) return {text:'🟡 偏高',cls:'iv-high'};
+  if(iv<40) return {text:'🟠 恐慌區間',cls:'iv-vhigh'};
+  return {text:'🔴 極端（黑天鵝）',cls:'iv-panic'};
+}
+
+// ── TAB 1 計算 ────────────────────────────────────────────────
+function calculate(){
+  const S   = parseFloat(document.getElementById('s').value);
+  const K   = parseFloat(document.getElementById('k').value);
+  const type= document.getElementById('opt_type').value;
+  const mkt = parseFloat(document.getElementById('mkt').value);
+  const days= parseFloat(document.getElementById('days').value);
+  const rate= parseFloat(document.getElementById('rate').value)/100;
+  const T   = days/365;
+
+  const iv  = impliedVol(S,K,T,rate,mkt,type);
+  const theo= bsPrice(S,K,T,rate,iv,type);
+  const otm = Math.abs(S-K)/S*100;
+  const be  = type==='put' ? K-mkt : K+mkt;
+  const gk  = calcGreeks(S,K,T,rate,iv,type);
+  const lbl = ivLabel(iv*100);
+
+  document.getElementById('r-iv').textContent   = (iv*100).toFixed(2)+'%';
+  document.getElementById('r-iv-lbl').innerHTML = `<span class="iv-badge ${lbl.cls}">${lbl.text}</span>`;
+  document.getElementById('r-theo').textContent = theo.toFixed(1);
+  document.getElementById('r-be').textContent   = be.toLocaleString();
+  document.getElementById('r-otm').textContent  = otm.toFixed(2)+'%';
+
+  // Verdict
+  const vbox  = document.getElementById('verdict-box');
+  const vtitle= document.getElementById('verdict-title');
+  const vdesc = document.getElementById('verdict-desc');
+  const premium= ((mkt-theo)/theo*100).toFixed(1);
+  if(iv>0.40){
+    vbox.className='verdict red';
+    vtitle.textContent='🔴 報價偏貴（IV 極高）';
+    vdesc.textContent=`隱含IV ${(iv*100).toFixed(2)}% 遠超正常水準，賣方可收取豐厚權利金，但需承擔黑天鵝風險。損益兩平點 ${be.toLocaleString()}，台指須跌破此點才開始虧損。`;
+  } else if(iv>0.30){
+    vbox.className='verdict orange';
+    vtitle.textContent='🟠 報價偏高（市場恐慌情緒）';
+    vdesc.textContent=`隱含IV ${(iv*100).toFixed(2)}%，處於恐慌區間，市場預期較大波動。若認為實際波動率不會這麼高，賣方有優勢。`;
+  } else if(iv>0.20){
+    vbox.className='verdict orange';
+    vtitle.textContent='🟡 報價合理偏高';
+    vdesc.textContent=`隱含IV ${(iv*100).toFixed(2)}%，略高於正常水準，整體報價尚屬合理範圍。`;
+  } else {
+    vbox.className='verdict green';
+    vtitle.textContent='✅ 報價合理（正常水準）';
+    vdesc.textContent=`隱含IV ${(iv*100).toFixed(2)}%，屬正常市場水準，買賣雙方相對公平。`;
+  }
+
+  document.getElementById('g-delta').textContent = gk.delta.toFixed(4);
+  document.getElementById('g-gamma').textContent = gk.gamma.toFixed(6);
+  document.getElementById('g-theta').textContent = gk.theta.toFixed(3);
+  document.getElementById('g-vega').textContent  = gk.vega.toFixed(3);
+
+  document.getElementById('result-section').style.display='block';
+  document.getElementById('greeks-section').style.display='block';
+}
+
+// ── TAB 2 對照表 ──────────────────────────────────────────────
+function buildTable(){
+  const S   = parseFloat(document.getElementById('tbl-s').value);
+  const days= parseFloat(document.getElementById('tbl-days').value);
+  const rate= parseFloat(document.getElementById('tbl-rate').value)/100;
+  const T   = days/365;
+
+  const ivLevels = [0.15,0.18,0.20,0.22,0.25,0.28,0.30,0.35,0.38,0.40,0.41,0.45,0.50,0.60];
+  const putKs  = [22000,24000,26000,28000,30000,32000];
+  const callKs = [30000,32000,34000,36000,38000,40000];
+
+  function renderTbl(tableId, strikes, type){
+    const tbl = document.getElementById(tableId);
+    let html = '<tr><th>IV</th><th>市況</th>';
+    strikes.forEach(k=> html+=`<th>${type.toUpperCase()} ${k.toLocaleString()}</th>`);
+    html += '</tr>';
+    const mktIV = 0.4086;
+    ivLevels.forEach(iv=>{
+      const isHL = Math.abs(iv - mktIV) < 0.006;
+      html += `<tr class="${isHL?'highlight':''}">`;
+      html += `<td><b>${(iv*100).toFixed(0)}%</b></td>`;
+      const labels = {0.15:'平靜',0.18:'正常低',0.20:'正常',0.22:'正常高',
+                      0.25:'偏活躍',0.28:'活躍',0.30:'偏緊張',0.35:'緊張',
+                      0.38:'恐慌前期',0.40:'恐慌',0.41:'恐慌',0.45:'高度恐慌',
+                      0.50:'極端',0.60:'黑天鵝'};
+      html += `<td>${labels[iv]||''}</td>`;
+      strikes.forEach(k=>{
+        const p = bsPrice(S,k,T,rate,iv,type);
+        html += `<td>${p.toFixed(1)}</td>`;
+      });
+      html += '</tr>';
+    });
+    tbl.innerHTML = html;
+  }
+  renderTbl('put-table',  putKs,  'put');
+  renderTbl('call-table', callKs, 'call');
+}
+
+// ── TAB 3 多檔 ────────────────────────────────────────────────
+function buildMultiInputs(){
+  const puts  = [22000,24000,26000,28000,30000,32000];
+  const calls = [32000,34000,36000,38000,40000];
+  let html = '<div class="grid-2">';
+  puts.forEach(k=>{
+    html+=`<div><label>Put ${k.toLocaleString()} 市場報價</label>
+    <input type="number" id="mp-put-${k}" placeholder="留空跳過" ${k===26000?'value="1500"':''}/>
+    </div>`;
+  });
+  calls.forEach(k=>{
+    html+=`<div><label>Call ${k.toLocaleString()} 市場報價</label>
+    <input type="number" id="mp-call-${k}" placeholder="留空跳過"/>
+    </div>`;
+  });
+  html += '</div>';
+  document.getElementById('multi-inputs').innerHTML = html;
+}
+
+function calcMulti(){
+  const S   = parseFloat(document.getElementById('m-s').value);
+  const days= parseFloat(document.getElementById('m-days').value);
+  const rate= parseFloat(document.getElementById('m-rate').value)/100;
+  const T   = days/365;
+
+  const rows = [];
+  const puts  = [22000,24000,26000,28000,30000,32000];
+  const calls = [32000,34000,36000,38000,40000];
+
+  puts.forEach(k=>{
+    const el = document.getElementById(`mp-put-${k}`);
+    if(el && el.value){
+      const mkt = parseFloat(el.value);
+      const iv  = impliedVol(S,k,T,rate,mkt,'put');
+      const theo= bsPrice(S,k,T,rate,iv,'put');
+      const be  = k-mkt;
+      rows.push({type:'Put',k,mkt,iv,theo,be});
+    }
+  });
+  calls.forEach(k=>{
+    const el = document.getElementById(`mp-call-${k}`);
+    if(el && el.value){
+      const mkt = parseFloat(el.value);
+      const iv  = impliedVol(S,k,T,rate,mkt,'call');
+      const theo= bsPrice(S,k,T,rate,iv,'call');
+      const be  = k+mkt;
+      rows.push({type:'Call',k,mkt,iv,theo,be});
+    }
+  });
+
+  let html=`<table><tr>
+    <th>類型</th><th>履約價</th><th>市場報價</th>
+    <th>隱含IV</th><th>理論價格</th><th>損益兩平</th><th>評估</th></tr>`;
+  rows.forEach(r=>{
+    const lbl=ivLabel(r.iv*100);
+    html+=`<tr>
+      <td>${r.type}</td>
+      <td>${r.k.toLocaleString()}</td>
+      <td>${r.mkt.toLocaleString()}</td>
+      <td><span class="iv-badge ${lbl.cls}">${(r.iv*100).toFixed(2)}%</span></td>
+      <td>${r.theo.toFixed(1)}</td>
+      <td>${r.be.toLocaleString()}</td>
+      <td>${lbl.text}</td>
+    </tr>`;
+  });
+  html+='</table>';
+  document.getElementById('multi-table').innerHTML=html;
+  document.getElementById('multi-result').style.display='block';
+}
+
+// ── Tab Switch ────────────────────────────────────────────────
+function switchTab(name){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  event.target.classList.add('active');
+  if(name==='table') buildTable();
+}
+
+// Init
+buildMultiInputs();
+</script>
+</body>
+</html>
