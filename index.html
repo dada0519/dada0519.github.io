@@ -189,45 +189,6 @@
       border-top: 1px solid var(--border);
       margin-top: 20px;
     }
-
-    /* Taiwan Index Tab */
-    .index-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-    }
-    .index-card {
-      border-radius: 12px;
-      padding: 20px 16px;
-      border: 1.5px solid var(--border);
-      text-align: center;
-      transition: transform .15s;
-    }
-    .index-card:hover { transform: translateY(-2px); }
-    .card-up   { background: #FEF0F0; border-color: #F5B7B1; }
-    .card-down { background: #EAFAF1; border-color: #A9DFBF; }
-    .card-flat { background: #F8FAFC; }
-    .idx-name  { font-size: 1rem; font-weight: bold; color: var(--text); margin-bottom: 2px; }
-    .idx-sub   { font-size: 0.78rem; color: var(--muted); margin-bottom: 12px; }
-    .idx-price { font-size: 1.85rem; font-weight: bold; }
-    .idx-change { font-size: 0.9rem; margin-top: 6px; }
-    .idx-time  { font-size: 0.72rem; color: var(--muted); margin-top: 8px; }
-    .idx-up    { color: #C0392B; }
-    .idx-down  { color: #1E8449; }
-    .idx-flat  { color: var(--muted); }
-    .index-toolbar {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-bottom: 16px; flex-wrap: wrap; gap: 8px;
-    }
-    .btn-refresh {
-      padding: 8px 20px; width: auto; margin-top: 0;
-      background: linear-gradient(135deg, var(--primary-light), var(--primary));
-      color: #fff; border: none; border-radius: 8px;
-      font-size: 0.9rem; font-weight: bold; cursor: pointer;
-      transition: opacity .2s;
-    }
-    .btn-refresh:hover { opacity: .85; }
-    .btn-refresh:disabled { opacity: .5; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -242,7 +203,6 @@
   <button class="tab-btn" onclick="switchTab('table')">📈 IV 對照表</button>
   <button class="tab-btn" onclick="switchTab('multi')">🔍 多檔評估</button>
   <button class="tab-btn" onclick="switchTab('guide')">📖 使用說明</button>
-  <button class="tab-btn" onclick="switchTab('index')">🏦 台股指數</button>
 </div>
 
 <!-- ── TAB 1: 快速計算 ───────────────────────────────────────── -->
@@ -418,32 +378,6 @@
       <tr><td>📌 波動率偏斜</td><td>深度 OTM Put 的 IV 通常比平值選擇權更高（Skew 現象）</td></tr>
       <tr><td>📌 流動性</td><td>遠月深 OTM 的買賣價差可能很大，成交價可能偏離理論值</td></tr>
       <tr><td>📌 保證金</td><td>賣出選擇權需維持保證金，極端行情可能超過本金</td></tr>
-    </table>
-  </div>
-</div>
-
-<!-- ── TAB 5: 台股指數 ───────────────────────────────────────── -->
-<div id="tab-index" class="tab-panel">
-  <div class="card">
-    <h2>台股主要指數即時點位</h2>
-    <div class="index-toolbar">
-      <span id="index-status" style="font-size:0.85rem;color:var(--muted)">點選「更新」載入最新資料</span>
-      <button class="btn-refresh" id="index-refresh-btn" onclick="fetchTaiwanIndices()">🔄 更新</button>
-    </div>
-    <div id="index-cards" class="index-grid">
-      <div class="index-card card-flat" style="grid-column:1/-1;padding:32px;color:var(--muted);font-size:0.92rem;">
-        按下「更新」按鈕以載入台股指數資料
-      </div>
-    </div>
-  </div>
-  <div class="card">
-    <h2>說明</h2>
-    <table class="guide-table">
-      <tr><td>📡 資料來源</td><td>Yahoo Finance（^TWII、^TWOELEC、^TWOFINANCE、^TWOCOMP）</td></tr>
-      <tr><td>🕐 交易時間</td><td>週一至週五 09:00 – 13:30（台灣時間），非交易時間顯示前一日收盤值</td></tr>
-      <tr><td>🔴 紅色</td><td>上漲（台灣慣例：紅漲綠跌）</td></tr>
-      <tr><td>🟢 綠色</td><td>下跌</td></tr>
-      <tr><td>⚠️ 注意</td><td>資料僅供參考，請以台灣證券交易所官方數據為準</td></tr>
     </table>
   </div>
 </div>
@@ -674,73 +608,6 @@ function switchTab(name){
   document.getElementById('tab-'+name).classList.add('active');
   event.target.classList.add('active');
   if(name==='table') buildTable();
-  if(name==='index') fetchTaiwanIndices();
-}
-
-// ── 台股指數 ──────────────────────────────────────────────────
-const TW_INDICES = [
-  { symbol: '%5ETWII',      name: '加權指數',   sub: 'TAIEX' },
-  { symbol: '%5ETWOELEC',   name: '電子類指數', sub: 'Electronics' },
-  { symbol: '%5ETWOFINANCE',name: '金融類指數', sub: 'Finance' },
-  { symbol: '%5ETWOCOMP',   name: '上櫃指數',   sub: 'TPEx OTC' },
-];
-
-async function fetchTaiwanIndices(){
-  const statusEl  = document.getElementById('index-status');
-  const refreshBtn= document.getElementById('index-refresh-btn');
-  statusEl.textContent = '載入中...';
-  refreshBtn.disabled  = true;
-
-  const promises = TW_INDICES.map(idx =>
-    fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${idx.symbol}?interval=1d&range=1d`)
-      .then(r => { if(!r.ok) throw new Error(r.status); return r.json(); })
-      .then(data => {
-        const meta = data.chart.result[0].meta;
-        const price    = meta.regularMarketPrice;
-        const prevClose= meta.chartPreviousClose;
-        const change   = price - prevClose;
-        const changePct= change / prevClose * 100;
-        return { ...idx, price, change, changePct,
-          time: new Date(meta.regularMarketTime * 1000), error: false };
-      })
-      .catch(() => ({ ...idx, error: true }))
-  );
-
-  const results = await Promise.all(promises);
-  renderIndices(results);
-
-  const anyOk = results.some(r => !r.error);
-  if(anyOk){
-    const now = new Date();
-    statusEl.textContent = `更新時間：${now.toLocaleString('zh-TW')}`;
-  } else {
-    statusEl.textContent = '⚠️ 資料載入失敗（可能受 CORS 限制），請稍後再試或改用桌面版瀏覽器';
-  }
-  refreshBtn.disabled = false;
-}
-
-function renderIndices(results){
-  document.getElementById('index-cards').innerHTML = results.map(r => {
-    if(r.error) return `
-      <div class="index-card card-flat">
-        <div class="idx-name">${r.name}</div>
-        <div class="idx-sub">${r.sub}</div>
-        <div class="idx-price idx-flat" style="font-size:1.2rem">無法取得</div>
-      </div>`;
-    const up   = r.change > 0;
-    const flat = r.change === 0;
-    const cls  = flat ? 'flat' : up ? 'up' : 'down';
-    const arrow= flat ? '─' : up ? '▲' : '▼';
-    const cardCls = flat ? 'card-flat' : up ? 'card-up' : 'card-down';
-    return `
-      <div class="index-card ${cardCls}">
-        <div class="idx-name">${r.name}</div>
-        <div class="idx-sub">${r.sub}</div>
-        <div class="idx-price idx-${cls}">${r.price.toLocaleString('zh-TW',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-        <div class="idx-change idx-${cls}">${arrow} ${Math.abs(r.change).toFixed(2)} (${Math.abs(r.changePct).toFixed(2)}%)</div>
-        <div class="idx-time">${r.time.toLocaleString('zh-TW')}</div>
-      </div>`;
-  }).join('');
 }
 
 // Init
